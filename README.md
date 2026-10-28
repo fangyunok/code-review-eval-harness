@@ -123,6 +123,32 @@ result = gate.check(metrics_by_backend)
 # result.exit_code: 0=通过 1=不通过，可直接接 CI
 ```
 
+## 归因可视化看板
+
+评测后可生成自包含的交互式 HTML 看板，四板块：
+
+1. **跨模型指标对比**：分组柱状图（Precision / Recall / F1）；
+2. **缺陷类型归因**：堆叠柱状图（每个模型各类缺陷的漏报数）；
+3. **critical 漏报明细**：最不能漏的缺陷，谁漏了、漏了什么；
+4. **历史趋势**：多次 run 的 F1 走向，识别退化。
+
+```bash
+# 评测同时产出看板
+creh eval --benchmark data/benchmark.jsonl --synthetic 50 --dashboard dashboard.html
+
+# 或从已有评测结果直接生成
+python -c "
+from code_review_eval.dashboard import extract_from_report, write_dashboard
+from code_review_eval.evaluate import evaluate, load_samples
+# ... 拿到 report 后：
+write_dashboard(extract_from_report(report), 'dashboard.html')
+"
+```
+
+看板数据内嵌在 HTML 里，用 ECharts（CDN）渲染，单文件可直接浏览器打开、无需后端。
+
+示例看板见 `examples/dashboard.html`（用「模型 A / 模型 B」对比数据生成，浏览器直接打开即可预览效果）。
+
 ## 架构
 
 ```
@@ -139,7 +165,8 @@ Model 层 ── 缺陷对齐打分（Precision / Recall / F1）
       │
       ├── 归因分析：哪个模型哪类缺陷漏报最多
       ├── 质量门禁 + 语义化退出码
-      └── run 产物落盘 + 历史趋势
+      ├── run 产物落盘 + 历史趋势
+      └── 归因可视化看板（交互式 HTML）
 ```
 
 ## 接入真实模型
@@ -168,6 +195,7 @@ src/code_review_eval/
   async_eval.py    异步并发执行器（并发/重试/超时/隔离）
   runstore.py      可复现 run 管理（run_id/配置快照/趋势）
   gate.py          质量门禁 + 退出码 + 防退化
+  dashboard.py     归因可视化看板（数据提取 + 交互式 HTML）
   cli.py           工业级评测 CLI
   datasets/
     synthetic.py   合成数据生成
@@ -182,6 +210,5 @@ demo.py              离线演示入口
 ## Roadmap
 
 - 对齐策略演进：嵌入相似度对齐、位置区间重叠判定
-- 按产品线聚合的归因看板与历史趋势可视化
 - 更多后端适配（Anthropic / 本地模型服务）
 - 评测集版本管理（数据集快照与变更追踪）

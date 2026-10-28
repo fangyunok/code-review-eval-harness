@@ -15,6 +15,7 @@ from .report import Report
 from .gate import QualityGate, GateResult
 from .runstore import RunStore, RunArtifact, RunConfig
 from .evaluate import evaluate, evaluate_async, load_samples
+from .dashboard import extract_from_report, extract_trend, render_dashboard, write_dashboard
 
 __version__ = "0.2.0"
 
@@ -33,4 +34,8 @@ __all__ = [
     "evaluate",
     "evaluate_async",
     "load_samples",
+    "extract_from_report",
+    "extract_trend",
+    "render_dashboard",
+    "write_dashboard",
 ]

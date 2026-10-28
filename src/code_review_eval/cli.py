@@ -74,6 +74,16 @@ def cmd_eval(args) -> int:
         config={"benchmark": args.benchmark, "thresholds": thresholds, "seed": args.seed},
     )
 
+    # 5.5) 生成归因看板
+    if args.dashboard:
+        from .dashboard import extract_from_report, extract_trend, write_dashboard
+
+        dash_data = extract_from_report(result["report"])
+        trend = extract_trend(store, metric="f1")
+        dash_path = args.dashboard
+        write_dashboard(dash_data, dash_path, trend=trend)
+        print(f"\n归因看板已生成：{dash_path}")
+
     # 6) 输出
     report = result["report"]
     print(report.to_markdown())
@@ -104,6 +114,7 @@ def main() -> None:
     p.add_argument("--retries", type=int, default=3)
     p.add_argument("--timeout", type=float, default=60.0)
     p.add_argument("--runs-dir", default="runs")
+    p.add_argument("--dashboard", default=None, help="归因看板输出路径（如 dashboard.html）")
 
     args = parser.parse_args()
     if args.cmd == "eval":
