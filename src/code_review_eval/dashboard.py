@@ -106,7 +106,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>代码评审 Agent 归因看板</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>__ECHARTS__</script>
 <style>
   :root {
     --bg: #f7f7f5;
@@ -270,13 +270,45 @@ window.addEventListener("resize", () => {
 """
 
 
+_ECHARTS_CACHE: Optional[str] = None
+
+
+def _load_echarts() -> str:
+    """加载内嵌的 ECharts 脚本（带缓存）。
+
+    从包内读取 echarts.min.js，内嵌进 HTML，使看板完全离线可用、
+    不依赖任何 CDN。若本地文件缺失则降级为 CDN 引用。
+    """
+    global _ECHARTS_CACHE
+    if _ECHARTS_CACHE is not None:
+        return _ECHARTS_CACHE
+    from pathlib import Path
+
+    local = Path(__file__).with_name("echarts.min.js")
+    if local.exists():
+        _ECHARTS_CACHE = local.read_text(encoding="utf-8")
+    else:
+        # 降级：CDN 引用（多源，任一可用即可）
+        _ECHARTS_CACHE = (
+            '<script src="https://unpkg.com/echarts@5.5.0/dist/echarts.min.js"></script>'
+            '<script>if(typeof echarts==="undefined"){'
+            'document.write(\'<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"><\\/script>\')}'
+            "</script>"
+        )
+    return _ECHARTS_CACHE
+
+
 def render_dashboard(
     data: Dict[str, Any], trend: Optional[List[Dict[str, Any]]] = None
 ) -> str:
-    """渲染看板 HTML。data 来自 extract_from_report，trend 来自 extract_trend。"""
+    """渲染看板 HTML。data 来自 extract_from_report，trend 来自 extract_trend。
+
+    ECharts 内嵌进 HTML，单文件完全离线可用。
+    """
     payload = dict(data)
     payload["trend"] = trend or []
-    return _HTML_TEMPLATE.replace("__DATA__", json.dumps(payload, ensure_ascii=False))
+    html = _HTML_TEMPLATE.replace("__DATA__", json.dumps(payload, ensure_ascii=False))
+    return html.replace("__ECHARTS__", _load_echarts())
 
 
 def write_dashboard(

@@ -73,3 +73,14 @@ def test_write_dashboard(tmp_path):
     assert Path(path).exists()
     content = Path(path).read_text(encoding="utf-8")
     assert content.startswith("<!DOCTYPE html>")
+
+
+def test_dashboard_embeds_echarts_no_cdn():
+    """看板应内嵌 ECharts，不依赖外部 CDN（离线可用）。"""
+    data = extract_from_report(_make_report())
+    html = render_dashboard(data, trend=[])
+    # 内嵌了 Apache 许可证的 echarts.min.js
+    assert "Apache Software Foundation" in html
+    # 无外部 CDN 引用
+    assert "cdn.jsdelivr.net" not in html
+    assert "unpkg.com" not in html

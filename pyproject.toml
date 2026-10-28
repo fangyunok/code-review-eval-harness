@@ -22,5 +22,8 @@ creh = "code_review_eval.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+code_review_eval = ["echarts.min.js"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

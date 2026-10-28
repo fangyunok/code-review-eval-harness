@@ -145,7 +145,7 @@ write_dashboard(extract_from_report(report), 'dashboard.html')
 "
 ```
 
-看板数据内嵌在 HTML 里，用 ECharts（CDN）渲染，单文件可直接浏览器打开、无需后端。
+看板数据内嵌在 HTML 里，ECharts 也内嵌（完全离线可用，不依赖 CDN），单文件可直接浏览器打开、无需后端。
 
 示例看板见 `examples/dashboard.html`（用「模型 A / 模型 B」对比数据生成，浏览器直接打开即可预览效果）。
 
