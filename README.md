@@ -1,15 +1,18 @@
 # code-review-eval-harness
 
-代码评审 Agent 双层评测框架：用一个可复现的评测集 + 双层评测（Harness / Model），量化「AI 代码评审工具（ai-review）」到底评得准不准。
+代码评审 Agent 双层评测框架：用可复现的评测集 + 双层评测（Harness / Model）+ 异步并发执行 + 质量门禁，量化「AI 代码评审工具（ai-review）」到底评得准不准，并把结果接进 CI 当质量否决项。
 
 ## 先看结论
 
 | 能力 | 指标 | 说明 |
 | --- | --- | --- |
+| 评测集管线 | 真实 PR 抽取 + 合成生成 + 去重/完整性/一致性校验 | 从真实研发链路整理评测用例，规模化可扩展 |
 | 工程脚手架稳定性 | 解析成功率 / 格式合规率 | Harness 层，隔离工程噪声 |
 | 模型评审能力 | Precision / Recall / F1 | Model 层，字段级缺陷对齐打分 |
 | 失败归因 | 按缺陷类型 / 严重度 / 产品线聚合漏报 | 定位「哪类缺陷漏得最多」 |
-| 质量门禁 | 低于阈值即挂 | 评测结果作为质量否决项接入 CI |
+| 异步并发 | 并发度 / 重试 / 超时 / 失败隔离 | 吞吐从串行到批量 |
+| 可复现 | run_id + 配置快照 + 结构化产物 | 每次评测可追溯、可重现 |
+| 质量门禁 | 阈值否决 + 语义化退出码 | 评测结果作为质量否决项接入 CI |
 
 ## 为什么是「双层」评测
 
@@ -26,14 +29,35 @@
 # 依赖仅需 Python 3.10+，核心评测零第三方依赖
 pip install -e ".[dev]"   # 跑测试；可选 openai 后端用 ".[openai]"
 
-# 离线跑通全链路（不烧任何 API，纯 FakeBackend 模拟两个模型）
-python demo.py
-
 # 跑单元测试
 pytest -q
+
+# 构建评测集（合成 200 条，确定性可复现）
+python -m code_review_eval.datasets.pipeline --output data/benchmark.jsonl --synthetic 200
+
+# 工业级评测：构建 + 异步评测 + 质量门禁（退出码 0=通过 1=不通过）
+creh eval --benchmark data/benchmark.jsonl --synthetic 50 --thresholds '{"f1": 0.5}'
+
+# 离线演示：模拟两个模型跑完整链路
+python demo.py
 ```
 
-`demo.py` 会加载 `data/samples.jsonl` 评测集，模拟「模型 A / 模型 B」两个后端跑完整链路，并在 `reports/` 下产出 `report.md` 和 `report.json`。
+## 评测集管线
+
+支持两种数据来源，混合构建，统一经质量校验：
+
+```bash
+# 合成数据：程序化生成，确定性可复现（seed 固定则结果一致）
+python -m code_review_eval.datasets.pipeline --synthetic 500
+
+# 真实 PR 抽取：从 GitHub API 拉取 PR 的 diff + review comment 构造成评测集
+python -m code_review_eval.datasets.pipeline --repo pandas-dev/pandas --token-file .gh-token
+
+# 混合：合成 + 真实
+python -m code_review_eval.datasets.pipeline --synthetic 200 --repo psf/requests --token-file .gh-token
+```
+
+真实 PR 抽取把「已经发生的代码评审（reviewer 提出的问题）」转成标准评测样本——review comment 的位置映射为 `location`，正文映射为缺陷描述，类型/严重度通过正文关键词归类。质量校验在入库前做三道把关：字段完整性、diff 内容去重、标注一致性。
 
 ## 评测集格式
 
@@ -57,10 +81,55 @@ pytest -q
 - 严重度：`critical` / `major` / `minor`
 - `location` 是对齐的关键：缺陷必须能落到具体位置，模型输出和标准答案之间才能判定「是否同一条缺陷」。
 
+## 异步并发执行
+
+评测执行用 asyncio 并发，支持重试、超时、失败隔离：
+
+```python
+from code_review_eval.async_eval import AsyncEvaluator, FakeAsyncBackend
+from code_review_eval.harness import Harness
+
+runner = AsyncEvaluator(
+    harness=Harness(None),
+    backend=FakeAsyncBackend(),
+    max_concurrency=8,   # 并发度
+    max_retries=3,       # 瞬时失败重试
+    timeout=60.0,        # 单次调用超时
+)
+```
+
+重试采用指数退避 + 抖动，避免同时重试打爆上游限流；单条样本失败被隔离，不拖垮整批，失败原因被记录。
+
+## 可复现 run 管理
+
+每次评测生成唯一 `run_id`，产物落到独立目录，配置快照随结果一起落盘：
+
+```
+runs/<run_id>/run.json   完整结果（固定 schema，供程序化消费）
+runs/<run_id>/report.md  人类可读报告
+```
+
+支持历史 run 的趋势对比，识别指标退化（防止「这次比上次差了」但没人发现）。
+
+## 质量门禁
+
+评测结果作为质量否决项：
+
+```python
+from code_review_eval.gate import QualityGate
+
+gate = QualityGate({"f1": 0.7, "recall": 0.6})
+result = gate.check(metrics_by_backend)
+# result.exit_code: 0=通过 1=不通过，可直接接 CI
+```
+
 ## 架构
 
 ```
-评测集 (samples.jsonl)
+评测集管线（真实 PR 抽取 + 合成生成）
+      │  质量校验（去重/完整性/一致性）
+      ▼
+评测集 (benchmark.jsonl)
       │
       ▼
 Harness 层 ── 统一 LLM 接口 · 结构化 JSON 输出 · 可解析性校验
@@ -69,7 +138,8 @@ Harness 层 ── 统一 LLM 接口 · 结构化 JSON 输出 · 可解析性校
 Model 层 ── 缺陷对齐打分（Precision / Recall / F1）
       │
       ├── 归因分析：哪个模型哪类缺陷漏报最多
-      └── 质量门禁 + Markdown/JSON 报告
+      ├── 质量门禁 + 语义化退出码
+      └── run 产物落盘 + 历史趋势
 ```
 
 ## 接入真实模型
@@ -90,19 +160,28 @@ backend = OpenAICompatibleBackend(
 
 ```
 src/code_review_eval/
-  schema.py     数据模型（Sample / Defect / ReviewIssue）
-  harness.py    Harness 层（统一调用 + 解析校验）
-  aligner.py    Model 层（缺陷对齐 + 打分 + 归因）
-  report.py     归因分析 + 报告输出
-  evaluate.py   评测集加载 + 一键评测入口
+  schema.py        数据模型（Sample / Defect / ReviewIssue）
+  harness.py       Harness 层（统一调用 + 解析校验）
+  aligner.py       Model 层（缺陷对齐 + 打分 + 归因）
+  report.py        归因分析 + 报告输出
+  evaluate.py      同步 + 异步评测入口
+  async_eval.py    异步并发执行器（并发/重试/超时/隔离）
+  runstore.py      可复现 run 管理（run_id/配置快照/趋势）
+  gate.py          质量门禁 + 退出码 + 防退化
+  cli.py           工业级评测 CLI
+  datasets/
+    synthetic.py   合成数据生成
+    github_source.py  真实 PR 抽取
+    validation.py  数据质量校验
+    pipeline.py    数据管线统一入口
 data/samples.jsonl   样例评测集（离线可复现）
-tests/test_core.py    单元测试
-demo.py               离线演示入口
+tests/               单元测试（核心 + 数据管线 + 工业级能力）
+demo.py              离线演示入口
 ```
 
 ## Roadmap
 
-- 从真实 PR/MR 数据自动构造评测集的数据管线（对接 GitHub API）
-- 更多对齐策略：嵌入相似度对齐、位置区间重叠判定
-- 按产品线聚合的归因看板与历史趋势追踪
-- 更多后端适配与并发评测
+- 对齐策略演进：嵌入相似度对齐、位置区间重叠判定
+- 按产品线聚合的归因看板与历史趋势可视化
+- 更多后端适配（Anthropic / 本地模型服务）
+- 评测集版本管理（数据集快照与变更追踪）

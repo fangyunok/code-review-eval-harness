@@ -79,3 +79,125 @@ def evaluate(
         out.mkdir(parents=True, exist_ok=True)
         report.write(str(out / "report.json"), str(out / "report.md"))
     return report
+
+
+def evaluate_async(
+    samples: List[Sample],
+    async_backends: Dict[str, Any],
+    run_store: Optional[Any] = None,
+    gate: Optional[Any] = None,
+    max_concurrency: int = 8,
+    max_retries: int = 3,
+    timeout: float = 60.0,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """工业级异步评测入口：并发执行 + 结果落盘 run store + 质量门禁。
+
+    返回一个 dict，包含：
+    - report: Report 对象
+    - metrics_by_backend: {后端名: {f1, recall, precision, ...}}，供门禁与趋势
+    - gate_result: 门禁结果（若传入 gate）
+    - run_id: 本次 run 的唯一 id（若传入 run_store）
+    """
+    import asyncio
+
+    from .async_eval import AsyncEvaluator
+    from .harness import Harness
+    from .runstore import RunArtifact, new_run_id
+
+    evaluator = ModelEvaluator()
+    runs: List[ModelRunResult] = []
+    metrics_by_backend: Dict[str, Dict[str, float]] = {}
+
+    for name, backend in async_backends.items():
+        harness = Harness(None)  # 只复用 prompt 构造与解析，不走同步 complete
+        async_runner = AsyncEvaluator(
+            harness=harness,
+            backend=backend,
+            max_concurrency=max_concurrency,
+            max_retries=max_retries,
+            timeout=timeout,
+        )
+
+        outcomes = asyncio.run(async_runner.evaluate_all(samples))
+
+        parse_ok = 0
+        format_ok = 0
+        failed = 0
+        total = len(samples)
+        sample_results = []
+
+        for sample in samples:
+            outcome = outcomes[sample.id]
+            if outcome.failed:
+                failed += 1
+                # 失败样本按「无输出」处理：漏报全部标准缺陷
+                sample_results.append(
+                    evaluator.evaluate_sample(sample, [])
+                )
+                continue
+            if outcome.parse_ok:
+                parse_ok += 1
+            if outcome.format_ok:
+                format_ok += 1
+            sample_results.append(
+                evaluator.evaluate_sample(sample, outcome.issues)
+            )
+
+        harness_metrics = {
+            "parse_rate": parse_ok / total if total else 0.0,
+            "format_ok_rate": format_ok / total if total else 0.0,
+            "failed": failed,
+            "total": total,
+        }
+        model_metrics = evaluator.aggregate(sample_results)
+
+        runs.append(
+            ModelRunResult(
+                name=name,
+                harness=harness_metrics,
+                model=model_metrics,
+                per_sample=sample_results,
+            )
+        )
+        metrics_by_backend[name] = {
+            "f1": model_metrics["f1"],
+            "precision": model_metrics["precision"],
+            "recall": model_metrics["recall"],
+            "missed_critical_count": model_metrics["missed_critical_count"],
+            "false_positive_count": model_metrics["false_positive_count"],
+        }
+
+    report = Report(runs)
+
+    result: Dict[str, Any] = {
+        "report": report,
+        "metrics_by_backend": metrics_by_backend,
+        "gate_result": None,
+        "run_id": None,
+    }
+
+    # 质量门禁
+    if gate is not None:
+        result["gate_result"] = gate.check(metrics_by_backend)
+
+    # 落盘 run store
+    if run_store is not None:
+        run_id = new_run_id()
+        artifact = RunArtifact(
+            run_id=run_id,
+            created_at=_now(),
+            config=config or {},
+            result=report.to_dict(),
+            metrics=metrics_by_backend,
+        )
+        run_store.save(artifact, report_md=report.to_markdown())
+        result["run_id"] = run_id
+
+    return result
+
+
+def _now() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

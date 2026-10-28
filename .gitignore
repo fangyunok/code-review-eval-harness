@@ -8,7 +8,9 @@ dist/
 .venv/
 venv/
 reports/
+runs/
 *.json
 !data/*.jsonl
 .idea/
 .vscode/
+.gh-token
