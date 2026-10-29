@@ -51,10 +51,22 @@ def cmd_eval(args) -> int:
         print(f"评测集为空：{args.benchmark}", file=sys.stderr)
         return 1
 
-    # 3) 构造后端：默认离线 FakeAsyncBackend（全命中），真实后端需另行配置
-    backends: Dict[str, object] = {
-        "offline-demo": FakeAsyncBackend()
-    }
+    # 3) 构造后端：默认离线 FakeAsyncBackend；指定 --model 时接真实模型
+    backends: Dict[str, object] = {}
+    if args.model:
+        from .backends import OpenAIAsyncBackend
+
+        # 模型列表可用逗号分隔，跑多模型对比
+        for name in [m.strip() for m in args.model.split(",") if m.strip()]:
+            backends[name] = OpenAIAsyncBackend(
+                api_key=args.api_key or None,
+                base_url=args.base_url or None,
+                model=name,
+                timeout=args.timeout,
+                min_interval=args.min_interval,
+            )
+    if not backends:
+        backends["offline-demo"] = FakeAsyncBackend()
 
     # 4) 门禁
     thresholds = json.loads(args.thresholds) if args.thresholds else {"f1": 0.5}
@@ -114,6 +126,10 @@ def main() -> None:
     p.add_argument("--timeout", type=float, default=60.0)
     p.add_argument("--runs-dir", default="runs")
     p.add_argument("--dashboard", default=None, help="归因看板输出路径（如 dashboard.html）")
+    p.add_argument("--model", default=None, help="真实模型名，逗号分隔跑多模型对比（如 deepseek-chat,qwen-plus）")
+    p.add_argument("--api-key", default=None, help="模型 API key（也可用环境变量 OPENAI_API_KEY）")
+    p.add_argument("--base-url", default=None, help="OpenAI 兼容服务的 base_url（如 https://api.deepseek.com/v1）")
+    p.add_argument("--min-interval", type=float, default=0.0, help="两次调用的最小间隔（秒），用于限流")
 
     args = parser.parse_args()
     if args.cmd == "eval":

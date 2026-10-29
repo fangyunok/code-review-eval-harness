@@ -13,6 +13,8 @@
 
 ### Added
 
+- 真实模型后端 `backends.py`：`OpenAIAsyncBackend`（异步、超时、可选限流）与 `OpenAICompatibleBackend`（同步），统一收敛到一处维护。
+- CLI 新增 `--model / --api-key / --base-url / --min-interval` 参数，一条命令接真实模型跑评测（单模型或多模型逗号分隔对比）。
 - 位置区间解析模块 `location.py`（`LocationSpan` / `parse_location`）。
 - 语义匹配模块 `semantic.py`（`cosine_similarity` / `EmbeddingSemanticMatcher` / `NoopSemanticMatcher`）。
 - 代码质量工具链：ruff（lint+format）、mypy（类型检查）、Makefile 统一入口、pre-commit 配置。

@@ -58,6 +58,33 @@ python scripts/verify_real_data.py --repo psf/requests --token-file .gh-token
 python demo.py
 ```
 
+## 接真实模型评测
+
+框架的 Harness 层已实现 OpenAI 兼容后端，任意实现 `/v1/chat/completions` 协议的服务都能接（OpenAI / DeepSeek / 通义千问 / Moonshot / 本地 Ollama / vLLM）。
+
+```bash
+# 安装 openai 依赖
+pip install -e ".[openai]"
+
+# 单模型评测（用环境变量传 key，避免写进命令行历史）
+export OPENAI_API_KEY="sk-..."
+creh eval \
+  --benchmark data/benchmark.jsonl \
+  --model deepseek-chat \
+  --base-url https://api.deepseek.com/v1 \
+  --thresholds '{"f1": 0.5}'
+
+# 多模型对比：逗号分隔，同一次评测产出跨模型指标 + 归因看板
+creh eval \
+  --benchmark data/benchmark.jsonl \
+  --model deepseek-chat,gpt-4o-mini \
+  --base-url https://api.deepseek.com/v1 \
+  --thresholds '{"f1": 0.5}' \
+  --dashboard dashboard.html
+```
+
+`--api-key` 也可直接传参；`--min-interval` 用于限流（如 `--min-interval 0.5` 控制每秒最多 2 次调用）。多模型对比时各模型的 base_url 需一致（不同服务分开跑）。
+
 ## 评测集管线
 
 支持两种数据来源，混合构建，统一经质量校验：
@@ -211,6 +238,7 @@ src/code_review_eval/
   report.py        归因分析 + 报告输出
   evaluate.py      同步 + 异步评测入口
   async_eval.py    异步并发执行器（并发/重试/超时/隔离）
+  backends.py      真实模型后端（OpenAI 兼容异步/同步，含限流）
   runstore.py      可复现 run 管理（run_id/配置快照/趋势）
   gate.py          质量门禁 + 退出码 + 防退化
   dashboard.py     归因可视化看板（结论先行 + 交互式 HTML）
