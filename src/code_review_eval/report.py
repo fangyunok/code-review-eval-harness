@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
@@ -16,27 +16,27 @@ class ModelRunResult:
     """某个模型（或配置）跑完整个评测集的完整结果。"""
 
     name: str
-    harness: Dict[str, Any] = field(default_factory=dict)  # Harness 层指标
-    model: Dict[str, Any] = field(default_factory=dict)  # Model 层聚合分数
-    per_sample: List[Any] = field(default_factory=list)
+    harness: dict[str, Any] = field(default_factory=dict)  # Harness 层指标
+    model: dict[str, Any] = field(default_factory=dict)  # Model 层聚合分数
+    per_sample: list[Any] = field(default_factory=list)
 
 
 class Report:
     """汇总多个模型/配置的结果，产出归因结论与报告。"""
 
-    def __init__(self, runs: List[ModelRunResult]):
+    def __init__(self, runs: list[ModelRunResult]):
         self.runs = runs
 
-    def attribute(self) -> Dict[str, Any]:
+    def attribute(self) -> dict[str, Any]:
         """归因：跨模型按缺陷类型聚合漏报，找出共性薄弱点。"""
-        by_type: Dict[str, Dict[str, int]] = {}
+        by_type: dict[str, dict[str, int]] = {}
         for run in self.runs:
             missed = run.model.get("missed_by_type", {})
             for t, c in missed.items():
                 by_type.setdefault(t, {})[run.name] = c
         return by_type
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "runs": [
                 {
@@ -54,7 +54,7 @@ class Report:
         }
 
     def to_markdown(self) -> str:
-        lines: List[str] = ["# 代码评审 Agent 评测报告", ""]
+        lines: list[str] = ["# 代码评审 Agent 评测报告", ""]
 
         lines.append("## 一、Model 层分数（Precision / Recall / F1）")
         lines.append("")

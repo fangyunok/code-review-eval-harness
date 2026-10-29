@@ -15,7 +15,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List
 
 from .async_eval import FakeAsyncBackend
 from .evaluate import evaluate_async, load_samples
@@ -23,7 +22,7 @@ from .gate import QualityGate
 from .runstore import RunStore
 
 
-def _build_backends_from_responses(responses: Dict[str, List[str]]):
+def _build_backends_from_responses(responses: dict[str, list[str]]):
     """从预置响应构建异步后端（离线演示用）。"""
     return {name: FakeAsyncBackend(list(resps)) for name, resps in responses.items()}
 
@@ -52,7 +51,7 @@ def cmd_eval(args) -> int:
         return 1
 
     # 3) 构造后端：默认离线 FakeAsyncBackend；指定 --model 时接真实模型
-    backends: Dict[str, object] = {}
+    backends: dict[str, object] = {}
     if args.model:
         from .backends import OpenAIAsyncBackend
 

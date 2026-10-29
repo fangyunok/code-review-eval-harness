@@ -15,7 +15,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 def _utcnow() -> str:
@@ -40,13 +40,13 @@ class RunConfig:
     """一次评测的完整配置快照。"""
 
     benchmark: str  # 评测集文件路径或标识
-    backends: Dict[str, Any]  # 后端名 -> 后端配置（不含密钥）
+    backends: dict[str, Any]  # 后端名 -> 后端配置（不含密钥）
     seed: int = 42
     python_version: str = field(default_factory=lambda: sys.version.split()[0])
     package_version: str = ""
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "benchmark": self.benchmark,
             "backends": self.backends,
@@ -63,11 +63,11 @@ class RunArtifact:
 
     run_id: str
     created_at: str
-    config: Dict[str, Any]
-    result: Dict[str, Any]  # Report.to_dict() 的内容
-    metrics: Dict[str, Any]  # 提取的关键指标，供趋势对比
+    config: dict[str, Any]
+    result: dict[str, Any]  # Report.to_dict() 的内容
+    metrics: dict[str, Any]  # 提取的关键指标，供趋势对比
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "run_id": self.run_id,
             "created_at": self.created_at,
@@ -98,14 +98,14 @@ class RunStore:
                 f.write(report_md)
         return run_dir
 
-    def list_runs(self) -> List[str]:
+    def list_runs(self) -> list[str]:
         if not self.base_dir.exists():
             return []
         return sorted(p.name for p in self.base_dir.iterdir() if p.is_dir())
 
     def load(self, run_id: str) -> RunArtifact:
         path = self.base_dir / run_id / "run.json"
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
         return RunArtifact(
             run_id=data["run_id"],
@@ -115,7 +115,7 @@ class RunStore:
             metrics=data["metrics"],
         )
 
-    def trend(self, metric: str = "f1", backend: Optional[str] = None) -> List[Dict]:
+    def trend(self, metric: str = "f1", backend: str | None = None) -> list[dict]:
         """提取历史 run 中某个指标的趋势，按时间排序。
 
         用于「防止指标退化」：对比最近一次与历史，识别是否变差。
@@ -132,7 +132,7 @@ class RunStore:
             else:
                 # 取第一个后端的指标作为整体代表
                 value = None
-                for name, m in art.metrics.items():
+                for _name, m in art.metrics.items():
                     if isinstance(m, dict):
                         value = m.get(metric)
                         break

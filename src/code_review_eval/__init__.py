@@ -8,17 +8,28 @@
 - QualityGate / RunStore: 门禁与可复现 run 管理
 """
 
-from .schema import Defect, Sample, ReviewIssue
-from .harness import Harness
 from .aligner import ModelEvaluator
-from .location import LocationSpan, parse_location
-from .semantic import EmbeddingSemanticMatcher, NoopSemanticMatcher, cosine_similarity
-from .report import Report
-from .gate import QualityGate, GateResult
-from .runstore import RunStore, RunArtifact, RunConfig
-from .evaluate import evaluate, evaluate_async, load_samples
+from .backends import (
+    AnthropicAsyncBackend,
+    OllamaAsyncBackend,
+    OpenAIAsyncBackend,
+    OpenAICompatibleBackend,
+)
 from .dashboard import extract_from_report, extract_trend, render_dashboard, write_dashboard
-from .backends import OpenAIAsyncBackend, OpenAICompatibleBackend
+from .evaluate import evaluate, evaluate_async, load_samples
+from .gate import GateResult, QualityGate
+from .harness import Harness
+from .location import LocationSpan, parse_location
+from .report import Report
+from .runstore import RunArtifact, RunConfig, RunStore
+from .schema import Defect, ReviewIssue, Sample
+from .semantic import (
+    EmbeddingSemanticMatcher,
+    NoopSemanticMatcher,
+    OpenAIEmbeddingEmbedder,
+    SentenceTransformerEmbedder,
+    cosine_similarity,
+)
 
 __version__ = "0.2.0"
 
@@ -43,4 +54,13 @@ __all__ = [
     "write_dashboard",
     "OpenAIAsyncBackend",
     "OpenAICompatibleBackend",
+    "AnthropicAsyncBackend",
+    "OllamaAsyncBackend",
+    "EmbeddingSemanticMatcher",
+    "NoopSemanticMatcher",
+    "OpenAIEmbeddingEmbedder",
+    "SentenceTransformerEmbedder",
+    "cosine_similarity",
+    "LocationSpan",
+    "parse_location",
 ]

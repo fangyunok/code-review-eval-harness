@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 # 匹配 "file.py:42" 或 "file.py:42-45" 或 "file.py:42,44"
 _LOCATION_RE = re.compile(r"^(.+?):(\d+)(?:[-~](\d+))?(?:,(\d+))*$")
@@ -27,14 +26,14 @@ class LocationSpan:
     """一个位置区间：文件 + [start, end] 行号。"""
 
     file: str
-    start: Optional[int] = None
-    end: Optional[int] = None
+    start: int | None = None
+    end: int | None = None
 
     @property
     def has_line(self) -> bool:
         return self.start is not None
 
-    def overlaps(self, other: "LocationSpan", tolerance: int = 3) -> float:
+    def overlaps(self, other: LocationSpan, tolerance: int = 3) -> float:
         """返回两个位置的重叠程度（0~1）。
 
         规则：
@@ -51,6 +50,8 @@ class LocationSpan:
         if not self.has_line or not other.has_line:
             return 1.0 if self.has_line == other.has_line else 0.6
         # 两边都有行号：算区间距离，按距离衰减打分
+        assert self.start is not None and self.end is not None
+        assert other.start is not None and other.end is not None
         gap = _interval_gap(self.start, self.end, other.start, other.end)
         if gap <= 0:
             return 1.0  # 区间重叠
@@ -75,7 +76,7 @@ def _norm_file(f: str) -> str:
     return f.strip().replace("\\", "/").lower()
 
 
-def parse_location(location: str) -> Optional[LocationSpan]:
+def parse_location(location: str) -> LocationSpan | None:
     """把 location 字符串解析成 LocationSpan；解析失败返回 None。"""
     if not location or not location.strip():
         return None

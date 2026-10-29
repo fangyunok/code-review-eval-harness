@@ -19,7 +19,7 @@ format:
 
 # 类型检查
 typecheck:
-	mypy src/code_review_eval
+	mypy src
 
 # 一键质量门禁（测试 + lint + 类型检查）
 check: test lint typecheck

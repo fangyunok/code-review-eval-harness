@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .schema import DEFECT_TYPES, SEVERITIES, ReviewIssue, Sample
 
@@ -34,7 +34,7 @@ class BaseBackend(ABC):
     """LLM 后端抽象：Harness 不关心具体模型，只关心「输入 prompt 输出文本」."""
 
     @abstractmethod
-    def complete(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
+    def complete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         """给定消息列表，返回模型生成的文本。"""
 
 
@@ -46,11 +46,11 @@ class FakeBackend(BaseBackend):
     - 验证 Harness 层的解析/校验逻辑本身是否正确。
     """
 
-    def __init__(self, responses: Optional[List[str]] = None):
+    def __init__(self, responses: list[str] | None = None):
         self.responses = list(responses or [])
-        self.calls: List[List[Dict[str, str]]] = []
+        self.calls: list[list[dict[str, str]]] = []
 
-    def complete(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
+    def complete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         self.calls.append(messages)
         if self.responses:
             return self.responses.pop(0)
@@ -67,7 +67,7 @@ class OpenAICompatibleBackend(BaseBackend):
         self.api_key = api_key
         self.model = model
 
-    def complete(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
+    def complete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         try:
             from openai import OpenAI
         except ImportError as e:  # pragma: no cover
@@ -95,7 +95,7 @@ class Harness:
         self.backend = backend
         self.system_prompt = system_prompt
 
-    def build_messages(self, sample: Sample) -> List[Dict[str, str]]:
+    def build_messages(self, sample: Sample) -> list[dict[str, str]]:
         user = f"代码变更（diff）：\n```\n{sample.diff}\n```\n"
         if sample.context:
             user += f"\n上下文：{sample.context}\n"
@@ -104,13 +104,13 @@ class Harness:
             {"role": "user", "content": user},
         ]
 
-    def review(self, sample: Sample) -> Dict[str, Any]:
+    def review(self, sample: Sample) -> dict[str, Any]:
         """评审单个样本，返回 {issues, parse_ok, format_ok, raw}."""
         raw = self.backend.complete(self.build_messages(sample))
         return self._parse(raw)
 
-    def _parse(self, raw: str) -> Dict[str, Any]:
-        result: Dict[str, Any] = {
+    def _parse(self, raw: str) -> dict[str, Any]:
+        result: dict[str, Any] = {
             "issues": [],
             "parse_ok": False,
             "format_ok": False,
@@ -125,7 +125,7 @@ class Harness:
         if not isinstance(issues_raw, list):
             return result
 
-        issues: List[ReviewIssue] = []
+        issues: list[ReviewIssue] = []
         format_ok = True
         for it in issues_raw:
             if not isinstance(it, dict):
@@ -151,7 +151,7 @@ class Harness:
         return result
 
     @staticmethod
-    def _extract_json(raw: str) -> Optional[Dict[str, Any]]:
+    def _extract_json(raw: str) -> dict[str, Any] | None:
         """从模型输出里提取 JSON，容忍 ```json 包裹或前后杂字。"""
         if not raw:
             return None

@@ -13,9 +13,12 @@
 
 ### Added
 
-- 真实模型后端 `backends.py`：`OpenAIAsyncBackend`（异步、超时、可选限流）与 `OpenAICompatibleBackend`（同步），统一收敛到一处维护。
+- 真实模型后端 `backends.py`：`OpenAIAsyncBackend`（异步、超时、可选限流）、`AnthropicAsyncBackend`（Claude 异步）、`OllamaAsyncBackend`（本地 Ollama，零 SDK 依赖）、`OpenAICompatibleBackend`（同步）。
 - CLI 新增 `--model / --api-key / --base-url / --min-interval` 参数，一条命令接真实模型跑评测（单模型或多模型逗号分隔对比）。
 - 位置区间解析模块 `location.py`（`LocationSpan` / `parse_location`）。
+- 语义嵌入端到端：`SentenceTransformerEmbedder`（本地模型）与 `OpenAIEmbeddingEmbedder`（云端 API）。
+- 评测集版本快照（manifest）：记录样本数、来源、seed、时间戳、内容 SHA256。
+- 多仓库批量抽取：`--repo` 支持逗号分隔多个仓库。
 - 语义匹配模块 `semantic.py`（`cosine_similarity` / `EmbeddingSemanticMatcher` / `NoopSemanticMatcher`）。
 - 代码质量工具链：ruff（lint+format）、mypy（类型检查）、Makefile 统一入口、pre-commit 配置。
 - MIT License、CHANGELOG.md。

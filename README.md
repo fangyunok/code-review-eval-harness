@@ -60,11 +60,17 @@ python demo.py
 
 ## 接真实模型评测
 
-框架的 Harness 层已实现 OpenAI 兼容后端，任意实现 `/v1/chat/completions` 协议的服务都能接（OpenAI / DeepSeek / 通义千问 / Moonshot / 本地 Ollama / vLLM）。
+框架已实现三类真实模型后端，异步评测链路（asyncio + 重试 + 超时 + 失败隔离）可直接接：
+
+| 后端 | 协议 | 依赖 | 适用 |
+| --- | --- | --- | --- |
+| `OpenAIAsyncBackend` | OpenAI 兼容 `/v1/chat/completions` | `openai` | OpenAI / DeepSeek / 通义 / Moonshot / 本地 vLLM |
+| `AnthropicAsyncBackend` | Anthropic Messages API | `anthropic` | Claude 系列 |
+| `OllamaAsyncBackend` | 本地 Ollama HTTP（零 SDK 依赖） | 无 | 本地模型离线评测 |
 
 ```bash
-# 安装 openai 依赖
-pip install -e ".[openai]"
+# 安装依赖
+pip install -e ".[openai,anthropic]"
 
 # 单模型评测（用环境变量传 key，避免写进命令行历史）
 export OPENAI_API_KEY="sk-..."
@@ -87,7 +93,7 @@ creh eval \
 
 ## 评测集管线
 
-支持两种数据来源，混合构建，统一经质量校验：
+支持两种数据来源，混合构建，统一经质量校验；支持**逗号分隔多个仓库**批量抽取，并自动生成**数据集版本快照**（manifest）：
 
 ```bash
 # 合成数据：程序化生成，确定性可复现（seed 固定则结果一致）
@@ -96,11 +102,16 @@ python -m code_review_eval.datasets.pipeline --synthetic 500
 # 真实 PR 抽取：从 GitHub API 拉取 PR 的 diff + review comment 构造成评测集
 python -m code_review_eval.datasets.pipeline --repo pandas-dev/pandas --token-file .gh-token
 
+# 多仓库批量：一次抽多个 repo 合并成 benchmark
+python -m code_review_eval.datasets.pipeline \
+  --repo psf/requests,pandas-dev/pandas,django/django \
+  --token-file .gh-token
+
 # 混合：合成 + 真实
 python -m code_review_eval.datasets.pipeline --synthetic 200 --repo psf/requests --token-file .gh-token
 ```
 
-真实 PR 抽取把「已经发生的代码评审（reviewer 提出的问题）」转成标准评测样本——review comment 的位置映射为 `location`，正文映射为缺陷描述，类型/严重度通过正文关键词归类。质量校验在入库前做三道把关：字段完整性、diff 内容去重、标注一致性。
+每次构建会在输出旁生成 `<output>.manifest.json`，记录样本数、来源仓库、seed、时间戳与内容 SHA256 哈希，让评测集可追溯、可复现。真实 PR 抽取把「已经发生的代码评审（reviewer 提出的问题）」转成标准评测样本——review comment 的位置映射为 `location`，正文映射为缺陷描述，类型/严重度通过正文关键词归类。质量校验在入库前做三道把关：字段完整性、diff 内容去重、标注一致性。
 
 ## 评测集格式
 
@@ -234,11 +245,11 @@ src/code_review_eval/
   harness.py       Harness 层（统一调用 + 解析校验）
   aligner.py       Model 层（缺陷对齐 + 打分 + 归因）
   location.py      位置区间解析（LocationSpan / 行号距离衰减）
-  semantic.py      语义匹配（cosine / embedding / 零依赖兜底）
+  semantic.py      语义匹配（cosine / 本地 ST 嵌入 / OpenAI 嵌入 / 零依赖兜底）
   report.py        归因分析 + 报告输出
   evaluate.py      同步 + 异步评测入口
   async_eval.py    异步并发执行器（并发/重试/超时/隔离）
-  backends.py      真实模型后端（OpenAI 兼容异步/同步，含限流）
+  backends.py      真实模型后端（OpenAI 兼容 / Anthropic / 本地 Ollama，含限流）
   runstore.py      可复现 run 管理（run_id/配置快照/趋势）
   gate.py          质量门禁 + 退出码 + 防退化
   dashboard.py     归因可视化看板（结论先行 + 交互式 HTML）
@@ -247,10 +258,10 @@ src/code_review_eval/
     synthetic.py   合成数据生成
     github_source.py  真实 PR 抽取（含非缺陷评论过滤）
     validation.py  数据质量校验
-    pipeline.py    数据管线统一入口
+    pipeline.py    数据管线统一入口（多 repo 批量 + 版本快照 manifest）
 data/samples.jsonl   样例评测集（离线可复现）
 scripts/verify_real_data.py   真实数据验证脚本
-tests/               单元测试（核心 + 对齐 + 数据管线 + 工业级 + 看板）
+tests/               单元测试（核心 + 对齐 + 数据管线 + 工业级 + 看板 + 后端 + 语义）
 demo.py              离线演示入口
 Makefile             统一工程入口（test/lint/typecheck/ci）
 .pre-commit-config.yaml   提交前自动检查
@@ -258,6 +269,6 @@ Makefile             统一工程入口（test/lint/typecheck/ci）
 
 ## Roadmap
 
-- 更多后端适配（Anthropic / 本地模型服务）
-- 评测集版本管理（数据集快照与变更追踪）
+- 对齐策略演进：跨缺陷的细粒度字段级对齐（如「同类缺陷多条」的区分）
 - 按产品线聚合的归因看板细化
+- 评测集覆盖更多缺陷类型的扩充

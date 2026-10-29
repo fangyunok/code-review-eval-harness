@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # 退出码语义
 EXIT_PASS = 0
@@ -19,10 +19,10 @@ EXIT_FAIL = 1
 @dataclass
 class GateResult:
     passed: bool
-    checks: List[Dict[str, Any]] = field(default_factory=list)
+    checks: list[dict[str, Any]] = field(default_factory=list)
     exit_code: int = EXIT_PASS
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"passed": self.passed, "checks": self.checks, "exit_code": self.exit_code}
 
 
@@ -33,12 +33,12 @@ class QualityGate:
     任一后端不达标即整体不通过。
     """
 
-    def __init__(self, thresholds: Dict[str, float]):
+    def __init__(self, thresholds: dict[str, float]):
         # thresholds: {metric: min_value}，如 {"f1": 0.7, "recall": 0.6}
         self.thresholds = thresholds
 
-    def check(self, metrics_by_backend: Dict[str, Dict[str, float]]) -> GateResult:
-        checks: List[Dict[str, Any]] = []
+    def check(self, metrics_by_backend: dict[str, dict[str, float]]) -> GateResult:
+        checks: list[dict[str, Any]] = []
         all_pass = True
         for backend, metrics in metrics_by_backend.items():
             for metric, threshold in self.thresholds.items():
@@ -59,11 +59,11 @@ class QualityGate:
 
 
 def detect_regression(
-    current: Dict[str, float],
-    previous: Optional[Dict[str, float]],
+    current: dict[str, float],
+    previous: dict[str, float] | None,
     metric: str,
     tolerance: float = 0.02,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """对比历史，识别指标退化。
 
     tolerance 是允许的波动幅度：当前值比历史低超过 tolerance 才判定为退化，

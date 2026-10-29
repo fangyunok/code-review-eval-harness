@@ -16,7 +16,7 @@ import asyncio
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .harness import Harness
 from .schema import ReviewIssue, Sample
@@ -26,7 +26,7 @@ class AsyncBackend(ABC):
     """异步后端抽象：await 一次模型调用。"""
 
     @abstractmethod
-    async def acomplete(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
+    async def acomplete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         """异步返回模型生成的文本。"""
 
 
@@ -35,7 +35,7 @@ class FakeAsyncBackend(AsyncBackend):
 
     def __init__(
         self,
-        responses: Optional[List[str]] = None,
+        responses: list[str] | None = None,
         delay: float = 0.0,
         fail_times: int = 0,
     ):
@@ -43,7 +43,7 @@ class FakeAsyncBackend(AsyncBackend):
         self.delay = delay
         self.fail_times = fail_times  # 前 N 次调用抛异常，用于测试重试逻辑
 
-    async def acomplete(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
+    async def acomplete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         if self.delay:
             await asyncio.sleep(self.delay)
         if self.fail_times > 0:
@@ -59,12 +59,12 @@ class AsyncReviewOutcome:
     """单条样本的异步评审结果。"""
 
     sample_id: str
-    issues: List[ReviewIssue]
+    issues: list[ReviewIssue]
     parse_ok: bool
     format_ok: bool
     raw: str
     failed: bool = False
-    error: Optional[str] = None
+    error: str | None = None
     attempts: int = 1
 
 
@@ -89,7 +89,7 @@ class AsyncEvaluator:
 
     async def _review_with_retry(self, sample: Sample) -> AsyncReviewOutcome:
         messages = self.harness.build_messages(sample)
-        last_error: Optional[str] = None
+        last_error: str | None = None
         for attempt in range(1, self.max_retries + 1):
             try:
                 raw = await asyncio.wait_for(
@@ -132,7 +132,7 @@ class AsyncEvaluator:
             attempts=self.max_retries,
         )
 
-    async def _worker(self, queue: asyncio.Queue, results: Dict[str, AsyncReviewOutcome]):
+    async def _worker(self, queue: asyncio.Queue, results: dict[str, AsyncReviewOutcome]):
         while True:
             sample = await queue.get()
             try:
@@ -140,10 +140,10 @@ class AsyncEvaluator:
             finally:
                 queue.task_done()
 
-    async def evaluate_all(self, samples: List[Sample]) -> Dict[str, AsyncReviewOutcome]:
+    async def evaluate_all(self, samples: list[Sample]) -> dict[str, AsyncReviewOutcome]:
         """并发评测所有样本，返回 sample_id -> 结果映射。"""
         queue: asyncio.Queue = asyncio.Queue()
-        results: Dict[str, AsyncReviewOutcome] = {}
+        results: dict[str, AsyncReviewOutcome] = {}
         for s in samples:
             queue.put_nowait(s)
 

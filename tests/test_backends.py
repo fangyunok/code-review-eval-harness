@@ -5,6 +5,7 @@ AsyncOpenAI 客户端，验证后端的调用/限流/错误处理逻辑本身正
 """
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -100,3 +101,71 @@ def test_sync_backend_returns_text(monkeypatch):
     backend._client = fake
     out = backend.complete([{"role": "user", "content": "hi"}])
     assert out == '{"issues": []}'
+
+
+def test_anthropic_backend_separates_system(monkeypatch):
+    from code_review_eval.backends import AnthropicAsyncBackend
+
+    backend = AnthropicAsyncBackend(api_key="sk-test", model="claude-test")
+
+    class _FakeContent:
+        type = "text"
+        text = "ok"
+
+    class _FakeResp:
+        content = [_FakeContent()]
+
+    class _FakeMessages:
+        def __init__(self):
+            self.calls = []
+
+        async def create(self, **kwargs):
+            self.calls.append(kwargs)
+            return _FakeResp()
+
+    fake = type("C", (), {"messages": _FakeMessages()})()
+    backend._client = fake
+    msgs = [
+        {"role": "system", "content": "你是评审专家"},
+        {"role": "user", "content": "评审这段 diff"},
+    ]
+    out = asyncio.run(backend.acomplete(msgs))
+    assert out == "ok"
+    # system 被分离，user 消息单独传递
+    assert fake.messages.calls[0]["system"] == "你是评审专家"
+    assert fake.messages.calls[0]["messages"][0]["role"] == "user"
+
+
+def test_ollama_backend_returns_text(monkeypatch):
+    import urllib.request as _urllib_request
+
+    from code_review_eval.backends import OllamaAsyncBackend
+
+    backend = OllamaAsyncBackend(model="qwen-test", base_url="http://localhost:11434")
+
+    class _FakeResp:
+        def __init__(self, data):
+            self._data = data
+
+        def read(self):
+            return json.dumps(self._data).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    calls = {}
+
+    def _fake_urlopen(req, timeout=None):
+        calls["payload"] = json.loads(req.data.decode("utf-8"))
+        calls["url"] = req.full_url
+        return _FakeResp({"message": {"content": "no issues"}})
+
+    monkeypatch.setattr(_urllib_request, "urlopen", _fake_urlopen)
+    out = asyncio.run(backend.acomplete([{"role": "user", "content": "hi"}]))
+    assert out == "no issues"
+    assert calls["url"] == "http://localhost:11434/api/chat"
+    assert calls["payload"]["model"] == "qwen-test"
+    assert calls["payload"]["stream"] is False

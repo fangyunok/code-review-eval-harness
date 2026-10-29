@@ -11,21 +11,21 @@
 from __future__ import annotations
 
 import math
-from typing import List, Protocol
+from typing import Protocol
 
 
 class Embedder(Protocol):
     """嵌入接口：把一段文本映射为向量。由调用方注入具体实现。"""
 
-    def embed(self, texts: List[str]) -> List[List[float]]:
+    def embed(self, texts: list[str]) -> list[list[float]]:
         ...
 
 
-def cosine_similarity(a: List[float], b: List[float]) -> float:
+def cosine_similarity(a: list[float], b: list[float]) -> float:
     """两个向量的余弦相似度（0~1）。"""
     if not a or not b or len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(y * y for y in b))
     if na == 0 or nb == 0:
@@ -62,3 +62,75 @@ class EmbeddingSemanticMatcher:
             sim = 0.0
         self._cache[key] = sim
         return sim
+
+
+class SentenceTransformerEmbedder:
+    """本地 sentence-transformers 嵌入实现（离线、零 API 调用）。
+
+    需安装 `sentence-transformers`：pip install -e ".[embeddings]"。
+    首次加载会下载模型权重；之后缓存于内存，重复调用不再重复加载。
+    """
+
+    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+        self.model_name = model_name
+        self._model = None
+
+    def _get_model(self):
+        if self._model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ImportError as e:  # pragma: no cover
+                raise RuntimeError(
+                    "使用 SentenceTransformerEmbedder 需要安装 sentence-transformers："
+                    "pip install -e \".[embeddings]\""
+                ) from e
+            self._model = SentenceTransformer(self.model_name)
+        return self._model
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        model = self._get_model()
+        vecs = model.encode(texts, normalize_embeddings=True)
+        return [v.tolist() for v in vecs]
+
+
+class OpenAIEmbeddingEmbedder:
+    """OpenAI 兼容的 embedding API 实现（云端向量）。
+
+    任意实现 /v1/embeddings 协议的服务都能接（OpenAI / DeepSeek / 通义等）。
+    需安装 openai：pip install -e ".[openai]"。
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str = "text-embedding-3-small",
+    ):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.model = model
+        self._client = None
+
+    def _get_client(self):
+        if self._client is None:
+            try:
+                from openai import OpenAI
+            except ImportError as e:  # pragma: no cover
+                raise RuntimeError(
+                    "使用 OpenAIEmbeddingEmbedder 需要安装 openai："
+                    "pip install -e \".[openai]\""
+                ) from e
+            kwargs = {}
+            if self.api_key:
+                kwargs["api_key"] = self.api_key
+            if self.base_url:
+                kwargs["base_url"] = self.base_url
+            self._client = OpenAI(**kwargs)
+        return self._client
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        client = self._get_client()
+        resp = client.embeddings.create(model=self.model, input=texts)
+        # 按输入顺序返回向量
+        data = sorted(resp.data, key=lambda d: d.index)
+        return [d.embedding for d in data]

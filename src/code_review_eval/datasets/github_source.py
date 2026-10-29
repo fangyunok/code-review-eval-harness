@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.request import Request, urlopen
 
 # 缺陷类型关键词 -> 类型映射（启发式）
@@ -81,7 +81,7 @@ class GitHubPRSource:
 
     API = "https://api.github.com"
 
-    def __init__(self, token: Optional[str] = None, timeout: float = 60.0, retries: int = 3):
+    def __init__(self, token: str | None = None, timeout: float = 60.0, retries: int = 3):
         self.token = token
         self.timeout = timeout
         self.retries = retries
@@ -107,7 +107,7 @@ class GitHubPRSource:
                     time.sleep(2 ** attempt)  # 指数退避
         raise last_err  # type: ignore[misc]
 
-    def fetch_prs(self, repo: str, state: str = "closed", per_page: int = 10) -> List[Dict]:
+    def fetch_prs(self, repo: str, state: str = "closed", per_page: int = 10) -> list[dict]:
         """拉取仓库的 PR 列表（含 diff_url 和 review_comments_url）。"""
         return self._request(
             f"/repos/{repo}/pulls?state={state}&per_page={per_page}&sort=updated"
@@ -130,16 +130,16 @@ class GitHubPRSource:
                     time.sleep(2 ** attempt)
         raise last_err  # type: ignore[misc]
 
-    def fetch_review_comments(self, comments_url: str) -> List[Dict]:
+    def fetch_review_comments(self, comments_url: str) -> list[dict]:
         return self._request(comments_url.split(self.API)[1])
 
-    def to_samples(self, repo: str, state: str = "closed", per_page: int = 10) -> List[Dict]:
+    def to_samples(self, repo: str, state: str = "closed", per_page: int = 10) -> list[dict]:
         """把仓库的 PR 转成评测样本列表。
 
         只保留「有 review comment 的 PR」——comment 是缺陷标注的来源，
         没有 comment 的 PR 无法作为有监督评测样本。
         """
-        samples: List[Dict] = []
+        samples: list[dict] = []
         prs = self.fetch_prs(repo, state=state, per_page=per_page)
         for pr in prs:
             if not pr.get("diff_url"):

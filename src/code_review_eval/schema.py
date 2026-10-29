@@ -7,8 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-
+from typing import Any
 
 # 缺陷类型枚举：对应代码评审里最常见的四类缺陷
 DEFECT_TYPES = ("logic", "security", "performance", "style")
@@ -30,7 +29,7 @@ class Defect:
     severity: str  # critical / major / minor
     message: str  # 这条缺陷是什么，标准表述
     location: str  # 位置标识，如 "src/util.py:42" 或函数名
-    category: Optional[str] = None  # 更细的子类，如 security 下的 SQL 注入
+    category: str | None = None  # 更细的子类，如 security 下的 SQL 注入
 
 
 @dataclass
@@ -44,11 +43,11 @@ class Sample:
     title: str
     diff: str
     context: str = ""
-    defects: List[Defect] = field(default_factory=list)
+    defects: list[Defect] = field(default_factory=list)
     repo: str = ""  # 来源仓库/产品线，便于归因时按产品线聚合
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Sample":
+    def from_dict(cls, data: dict[str, Any]) -> Sample:
         defects = [
             Defect(
                 id=d["id"],
@@ -81,4 +80,4 @@ class ReviewIssue:
     severity: str
     message: str
     location: str = ""
-    category: Optional[str] = None
+    category: str | None = None

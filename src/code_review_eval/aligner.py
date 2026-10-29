@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .location import parse_location
 from .schema import Defect, ReviewIssue, Sample
@@ -52,9 +52,9 @@ class SampleResult:
     tp: int = 0
     fp: int = 0
     fn: int = 0
-    missed_critical: List[Defect] = field(default_factory=list)
-    missed_by_type: Dict[str, int] = field(default_factory=dict)
-    false_positives: List[ReviewIssue] = field(default_factory=list)
+    missed_critical: list[Defect] = field(default_factory=list)
+    missed_by_type: dict[str, int] = field(default_factory=dict)
+    false_positives: list[ReviewIssue] = field(default_factory=list)
 
 
 class ModelEvaluator:
@@ -71,7 +71,7 @@ class ModelEvaluator:
         self,
         location_weight: float = 0.5,
         location_tolerance: int = 3,
-        semantic_matcher: Optional[Any] = None,
+        semantic_matcher: Any | None = None,
         match_threshold: float = 0.5,
     ):
         self.location_weight = location_weight
@@ -80,7 +80,7 @@ class ModelEvaluator:
         self.match_threshold = match_threshold
 
     def evaluate_sample(
-        self, sample: Sample, predicted: List[ReviewIssue]
+        self, sample: Sample, predicted: list[ReviewIssue]
     ) -> SampleResult:
         res = SampleResult(sample_id=sample.id)
 
@@ -108,7 +108,7 @@ class ModelEvaluator:
         return res
 
     def _match(
-        self, pred: ReviewIssue, gt: List[Defect], matched: List[bool]
+        self, pred: ReviewIssue, gt: list[Defect], matched: list[bool]
     ) -> int | None:
         """在未命中的标准缺陷里，找与 pred 最像的一条；找不到返回 None。"""
         best_idx = None
@@ -178,7 +178,7 @@ class ModelEvaluator:
         return inter / union if union else 0.0
 
     @staticmethod
-    def aggregate(results: List[SampleResult]) -> Dict[str, Any]:
+    def aggregate(results: list[SampleResult]) -> dict[str, Any]:
         """把多个样本结果聚合为整体 Precision / Recall / F1，以及归因分布。"""
         tp = sum(r.tp for r in results)
         fp = sum(r.fp for r in results)
@@ -193,7 +193,7 @@ class ModelEvaluator:
         )
 
         missed_critical = [d for r in results for d in r.missed_critical]
-        missed_by_type: Dict[str, int] = {}
+        missed_by_type: dict[str, int] = {}
         for r in results:
             for t, c in r.missed_by_type.items():
                 missed_by_type[t] = missed_by_type.get(t, 0) + c

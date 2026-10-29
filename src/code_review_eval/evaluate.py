@@ -11,18 +11,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .aligner import ModelEvaluator
-from .harness import BaseBackend, Harness
+from .harness import BaseBackend, FakeBackend, Harness
 from .report import ModelRunResult, Report
 from .schema import Sample
 
 
-def load_samples(path: str) -> List[Sample]:
+def load_samples(path: str) -> list[Sample]:
     """从 JSONL 文件加载评测集，每行一个样本。"""
-    samples: List[Sample] = []
-    with open(path, "r", encoding="utf-8") as f:
+    samples: list[Sample] = []
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -32,15 +32,15 @@ def load_samples(path: str) -> List[Sample]:
 
 
 def evaluate(
-    samples: List[Sample],
-    backends: Dict[str, BaseBackend],
-    output_dir: Optional[str] = None,
+    samples: list[Sample],
+    backends: dict[str, BaseBackend],
+    output_dir: str | None = None,
 ) -> Report:
     """跑完整评测，返回 Report。若给 output_dir 则同时落盘报告。"""
     harnesses = {name: Harness(backend) for name, backend in backends.items()}
     evaluator = ModelEvaluator()
 
-    runs: List[ModelRunResult] = []
+    runs: list[ModelRunResult] = []
     for name, harness in harnesses.items():
         parse_ok = 0
         format_ok = 0
@@ -75,22 +75,22 @@ def evaluate(
 
     report = Report(runs)
     if output_dir:
-        out = Path(output_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        report.write(str(out / "report.json"), str(out / "report.md"))
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        report.write(str(output_path / "report.json"), str(output_path / "report.md"))
     return report
 
 
 def evaluate_async(
-    samples: List[Sample],
-    async_backends: Dict[str, Any],
-    run_store: Optional[Any] = None,
-    gate: Optional[Any] = None,
+    samples: list[Sample],
+    async_backends: dict[str, Any],
+    run_store: Any | None = None,
+    gate: Any | None = None,
     max_concurrency: int = 8,
     max_retries: int = 3,
     timeout: float = 60.0,
-    config: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """工业级异步评测入口：并发执行 + 结果落盘 run store + 质量门禁。
 
     返回一个 dict，包含：
@@ -106,11 +106,13 @@ def evaluate_async(
     from .runstore import RunArtifact, new_run_id
 
     evaluator = ModelEvaluator()
-    runs: List[ModelRunResult] = []
-    metrics_by_backend: Dict[str, Dict[str, float]] = {}
+    runs: list[ModelRunResult] = []
+    metrics_by_backend: dict[str, dict[str, float]] = {}
 
     for name, backend in async_backends.items():
-        harness = Harness(None)  # 只复用 prompt 构造与解析，不走同步 complete
+        # 异步评测只复用 Harness 的 prompt 构造与解析，不走同步 complete，
+        # 因此传入一个占位 FakeBackend（不会被真正调用）。
+        harness = Harness(FakeBackend())
         async_runner = AsyncEvaluator(
             harness=harness,
             backend=backend,
@@ -170,7 +172,7 @@ def evaluate_async(
 
     report = Report(runs)
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "report": report,
         "metrics_by_backend": metrics_by_backend,
         "gate_result": None,

@@ -10,11 +10,10 @@
 from __future__ import annotations
 
 import random
-from typing import Dict, List
 
 # 缺陷模板：每个模板是一个 (类型, 严重度, 缺陷描述, 位置, diff 的 before/after)
 # 这里用「最小可复现缺陷」的范式，确保每条样例都明确、可对齐。
-_DEFECT_TEMPLATES: List[Dict] = [
+_DEFECT_TEMPLATES: list[dict] = [
     {
         "type": "security",
         "severity": "critical",
@@ -99,7 +98,7 @@ _MODULE_NAMES = ["service", "handler", "client", "worker", "mapper", "helper", "
 _LINE_BASES = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52]
 
 
-def _vary_template(tpl: Dict, rng: random.Random, idx: int) -> Dict:
+def _vary_template(tpl: dict, rng: random.Random, idx: int) -> dict:
     """对模板做变量替换，生成一条内容不同的新样本。
 
     替换规则：函数名 -> 随机候选 + 序号；变量名 -> 随机候选；
@@ -130,14 +129,14 @@ def _vary_template(tpl: Dict, rng: random.Random, idx: int) -> Dict:
     }
 
 
-def generate_samples(count: int, seed: int = 42, repo: str = "synthetic") -> List[Dict]:
+def generate_samples(count: int, seed: int = 42, repo: str = "synthetic") -> list[dict]:
     """生成 count 条合成评测样例，确定性可复现。
 
     通过变量替换让每条样本的 diff 内容都不同（语义等价、缺陷类型相同），
     既能通过去重校验，又能真实测试模型对「同类缺陷不同写法」的泛化。
     """
     rng = random.Random(seed)
-    samples: List[Dict] = []
+    samples: list[dict] = []
     for idx in range(count):
         tpl = _DEFECT_TEMPLATES[idx % len(_DEFECT_TEMPLATES)]
         varied = _vary_template(tpl, rng, idx)
@@ -163,10 +162,10 @@ def generate_samples(count: int, seed: int = 42, repo: str = "synthetic") -> Lis
     return samples
 
 
-def _distribution_summary(samples: List[Dict]) -> Dict:
+def _distribution_summary(samples: list[dict]) -> dict:
     """统计合成数据的缺陷类型/严重度分布，用于质量校验报告。"""
-    by_type: Dict[str, int] = {}
-    by_severity: Dict[str, int] = {}
+    by_type: dict[str, int] = {}
+    by_severity: dict[str, int] = {}
     for s in samples:
         for d in s["defects"]:
             by_type[d["type"]] = by_type.get(d["type"], 0) + 1

@@ -12,12 +12,12 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .report import Report
 
 
-def extract_from_report(report: Report) -> Dict[str, Any]:
+def extract_from_report(report: Report) -> dict[str, Any]:
     """从单个 Report 提取看板数据（不含历史趋势）。
 
     返回：{models, metrics, attribution_rows, missed_critical}
@@ -73,7 +73,7 @@ def extract_from_report(report: Report) -> Dict[str, Any]:
     }
 
 
-def _build_summary(metrics: List[Dict[str, Any]], attribution: Dict[str, Dict[str, int]]) -> Dict[str, Any]:
+def _build_summary(metrics: list[dict[str, Any]], attribution: dict[str, dict[str, int]]) -> dict[str, Any]:
     """构建「结论先行」摘要：谁最优、F1 差距、最薄弱缺陷类型。"""
     if not metrics:
         return {"best": None, "best_f1": 0, "runner_up_f1": 0, "gap": 0,
@@ -103,12 +103,12 @@ def _build_summary(metrics: List[Dict[str, Any]], attribution: Dict[str, Dict[st
     }
 
 
-def extract_trend(run_store: Any, metric: str = "f1") -> List[Dict[str, Any]]:
+def extract_trend(run_store: Any, metric: str = "f1") -> list[dict[str, Any]]:
     """从 RunStore 提取历史趋势（每个后端一条折线）。"""
     if run_store is None:
         return []
     runs = run_store.list_runs()
-    series: Dict[str, List[Dict[str, Any]]] = {}
+    series: dict[str, list[dict[str, Any]]] = {}
     for run_id in runs:
         art = run_store.load(run_id)
         created_at = art.created_at
@@ -322,7 +322,7 @@ window.addEventListener("resize", () => {
 """
 
 
-_ECHARTS_CACHE: Optional[str] = None
+_ECHARTS_CACHE: str | None = None
 
 
 def _load_echarts() -> str:
@@ -351,7 +351,7 @@ def _load_echarts() -> str:
 
 
 def render_dashboard(
-    data: Dict[str, Any], trend: Optional[List[Dict[str, Any]]] = None
+    data: dict[str, Any], trend: list[dict[str, Any]] | None = None
 ) -> str:
     """渲染看板 HTML。data 来自 extract_from_report，trend 来自 extract_trend。
 
@@ -364,9 +364,9 @@ def render_dashboard(
 
 
 def write_dashboard(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     path: str,
-    trend: Optional[List[Dict[str, Any]]] = None,
+    trend: list[dict[str, Any]] | None = None,
 ) -> str:
     """把看板写盘，返回路径。"""
     html = render_dashboard(data, trend)

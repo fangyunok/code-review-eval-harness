@@ -1,6 +1,5 @@
 """核心逻辑单元测试：对齐打分、JSON 解析、聚合、报告生成。"""
 
-import json
 import sys
 from pathlib import Path
 

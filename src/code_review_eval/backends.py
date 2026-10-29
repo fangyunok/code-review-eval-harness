@@ -16,8 +16,9 @@ OpenAI / DeepSeek / 通义千问 / Moonshot / 本地 Ollama / vLLM 等。
 from __future__ import annotations
 
 import asyncio
+import json
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .async_eval import AsyncBackend
 
@@ -35,8 +36,8 @@ class OpenAIAsyncBackend(AsyncBackend):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
         model: str = "gpt-4o-mini",
         timeout: float = 120.0,
         min_interval: float = 0.0,
@@ -59,7 +60,7 @@ class OpenAIAsyncBackend(AsyncBackend):
                     "使用 OpenAIAsyncBackend 需要安装 openai："
                     "pip install 'openai>=1.0'"
                 ) from e
-            kwargs: Dict[str, Any] = {}
+            kwargs: dict[str, Any] = {}
             if self.api_key:
                 kwargs["api_key"] = self.api_key
             if self.base_url:
@@ -77,7 +78,7 @@ class OpenAIAsyncBackend(AsyncBackend):
             await asyncio.sleep(wait)
         self._last_call = time.monotonic()
 
-    async def acomplete(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
+    async def acomplete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         """异步调用一次 chat completion，返回模型文本。"""
         client = self._get_client()
         await self._throttle()
@@ -100,8 +101,8 @@ class OpenAICompatibleBackend:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
         model: str = "gpt-4o-mini",
         timeout: float = 120.0,
     ):
@@ -120,7 +121,7 @@ class OpenAICompatibleBackend:
                     "使用 OpenAICompatibleBackend 需要安装 openai："
                     "pip install 'openai>=1.0'"
                 ) from e
-            kwargs: Dict[str, Any] = {}
+            kwargs: dict[str, Any] = {}
             if self.api_key:
                 kwargs["api_key"] = self.api_key
             if self.base_url:
@@ -128,9 +129,101 @@ class OpenAICompatibleBackend:
             self._client = OpenAI(**kwargs)
         return self._client
 
-    def complete(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
+    def complete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         client = self._get_client()
         resp = client.chat.completions.create(
             model=self.model, messages=messages, **kwargs
         )
         return resp.choices[0].message.content or ""
+
+
+class AnthropicAsyncBackend(AsyncBackend):
+    """Anthropic（Claude）异步后端。
+
+    需安装 anthropic：pip install anthropic。用 AsyncAnthropic 客户端。
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str = "claude-3-5-haiku-latest",
+        timeout: float = 120.0,
+        max_tokens: int = 1024,
+    ):
+        self.api_key = api_key
+        self.model = model
+        self.timeout = timeout
+        self.max_tokens = max_tokens
+        self._client = None
+
+    def _get_client(self):
+        if self._client is None:
+            try:
+                from anthropic import AsyncAnthropic
+            except ImportError as e:  # pragma: no cover
+                raise RuntimeError(
+                    "使用 AnthropicAsyncBackend 需要安装 anthropic："
+                    "pip install anthropic"
+                ) from e
+            kwargs: dict[str, Any] = {}
+            if self.api_key:
+                kwargs["api_key"] = self.api_key
+            self._client = AsyncAnthropic(**kwargs)
+        return self._client
+
+    async def acomplete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
+        client = self._get_client()
+        # Anthropic 要求 system 与 user 分离
+        system = next(
+            (m["content"] for m in messages if m.get("role") == "system"), ""
+        )
+        user_msgs = [m for m in messages if m.get("role") != "system"]
+        resp = await asyncio.wait_for(
+            client.messages.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                system=system or None,
+                messages=user_msgs,
+                **kwargs,
+            ),
+            timeout=self.timeout,
+        )
+        # 拼接所有文本块
+        parts = [b.text for b in resp.content if getattr(b, "type", "") == "text"]
+        return "".join(parts)
+
+
+class OllamaAsyncBackend(AsyncBackend):
+    """本地 Ollama 异步后端（零 SDK 依赖，直接走 HTTP）。
+
+    Ollama 默认监听 http://localhost:11434，模型需先 `ollama pull` 好。
+    用标准库 urllib + asyncio.to_thread 实现，避免引入 aiohttp 依赖。
+    """
+
+    def __init__(
+        self,
+        model: str = "qwen2.5:7b",
+        base_url: str = "http://localhost:11434",
+        timeout: float = 300.0,
+    ):
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    async def acomplete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
+        def _sync_call() -> str:
+            from urllib import request
+
+            payload = json.dumps(
+                {"model": self.model, "messages": messages, "stream": False}
+            ).encode("utf-8")
+            req = request.Request(
+                f"{self.base_url}/api/chat",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            with request.urlopen(req, timeout=self.timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return data.get("message", {}).get("content", "")
+
+        return await asyncio.wait_for(asyncio.to_thread(_sync_call), timeout=self.timeout)

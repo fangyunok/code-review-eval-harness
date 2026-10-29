@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 from ..schema import DEFECT_TYPES, SEVERITIES
 
@@ -21,14 +20,14 @@ class ValidationReport:
     passed: int = 0
     dropped_duplicate: int = 0
     dropped_invalid: int = 0
-    issues: List[str] = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)
 
     @property
     def pass_rate(self) -> float:
         return self.passed / self.total if self.total else 1.0
 
 
-def _valid_sample(s: Dict) -> bool:
+def _valid_sample(s: dict) -> bool:
     """单条样本是否通过字段完整性校验。"""
     if not s.get("id") or not s.get("diff", "").strip():
         return False
@@ -52,17 +51,17 @@ def _valid_sample(s: Dict) -> bool:
     return True
 
 
-def _diff_hash(s: Dict) -> str:
+def _diff_hash(s: dict) -> str:
     """按 diff 内容 + repo 做去重哈希。"""
     raw = (s.get("repo", "") + "\n" + s.get("diff", "")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
 
-def validate_samples(samples: List[Dict]) -> tuple[List[Dict], ValidationReport]:
+def validate_samples(samples: list[dict]) -> tuple[list[dict], ValidationReport]:
     """校验并清洗样本列表，返回 (通过样本, 校验报告)。"""
     report = ValidationReport(total=len(samples))
     seen_hashes: set = set()
-    clean: List[Dict] = []
+    clean: list[dict] = []
 
     for s in samples:
         if not _valid_sample(s):
