@@ -1,7 +1,7 @@
 """Harness 层：统一 LLM 调用脚手架，隔离工程噪声。
 
 这一层评测的是「脚手架本身靠不靠谱」，而非模型能力。它负责：
-1. 把不同后端（fake/OpenAI 兼容）抽象成一个统一接口；
+1. 用 `BaseBackend` 抽象统一不同后端（fake / 各类真实模型）的调用接口；
 2. 用结构化 prompt 强制模型输出 JSON 评审意见；
 3. 校验输出是否可解析、格式是否合规，记录解析成功率。
 
@@ -56,30 +56,6 @@ class FakeBackend(BaseBackend):
             return self.responses.pop(0)
         # 默认：声明没有缺陷，保证可解析
         return '{"issues": []}'
-
-
-class OpenAICompatibleBackend(BaseBackend):
-    """OpenAI 兼容后端：通过 base_url + api_key 连接任意兼容服务
-    （OpenAI / 本地 vLLM / 其他中转），模型名可配。"""
-
-    def __init__(self, base_url: str, api_key: str, model: str):
-        self.base_url = base_url
-        self.api_key = api_key
-        self.model = model
-
-    def complete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
-        try:
-            from openai import OpenAI
-        except ImportError as e:  # pragma: no cover
-            raise RuntimeError(
-                "使用 OpenAICompatibleBackend 需要安装 openai：pip install openai"
-            ) from e
-
-        client = OpenAI(base_url=self.base_url, api_key=self.api_key)
-        resp = client.chat.completions.create(
-            model=self.model, messages=messages, **kwargs
-        )
-        return resp.choices[0].message.content or ""
 
 
 class Harness:

@@ -1,8 +1,14 @@
 # code-review-eval-harness
 
+[![test](https://github.com/fangyunok/code-review-eval-harness/actions/workflows/test.yml/badge.svg)](https://github.com/fangyunok/code-review-eval-harness/actions/workflows/test.yml)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 代码评审 Agent 双层评测框架：用可复现的评测集 + 双层评测（Harness / Model）+ 异步并发执行 + 质量门禁，量化「AI 代码评审工具（ai-review）」到底评得准不准，并把结果接进 CI 当质量否决项。
 
 ## 先看结论
+
+**工程质量**：51 个单元测试全过，`ruff`（lint + format）与 `mypy`（类型检查）零告警，CI 在 Python 3.10 / 3.11 / 3.12 三版本矩阵下全绿。
 
 | 能力 | 指标 | 说明 |
 | --- | --- | --- |
@@ -141,10 +147,10 @@ python -m code_review_eval.datasets.pipeline --synthetic 200 --repo psf/requests
 
 ```python
 from code_review_eval.async_eval import AsyncEvaluator, FakeAsyncBackend
-from code_review_eval.harness import Harness
+from code_review_eval.harness import Harness, FakeBackend
 
 runner = AsyncEvaluator(
-    harness=Harness(None),
+    harness=Harness(FakeBackend()),
     backend=FakeAsyncBackend(),
     max_concurrency=8,   # 并发度
     max_retries=3,       # 瞬时失败重试
@@ -225,13 +231,14 @@ Model 层 ── 缺陷对齐打分（Precision / Recall / F1）
 
 ## 接入真实模型
 
-框架内置 `OpenAICompatibleBackend`，可连任意 OpenAI 兼容服务：
+框架内置三类真实模型后端（统一从 `code_review_eval` 顶层导出），异步评测链路（asyncio + 重试 + 超时 + 失败隔离）可直接接：
 
 ```python
-from code_review_eval.harness import OpenAICompatibleBackend
+from code_review_eval import OpenAICompatibleBackend, OpenAIAsyncBackend
 
+# 同步后端（OpenAI 兼容协议，任意 /v1/chat/completions 服务均可）
 backend = OpenAICompatibleBackend(
-    base_url="https://api.openai.com/v1",  # 或本地 vLLM 等
+    base_url="https://api.openai.com/v1",   # 或本地 vLLM、DeepSeek、通义等
     api_key="sk-...",
     model="gpt-4o-mini",
 )

@@ -95,8 +95,7 @@ class OpenAIAsyncBackend(AsyncBackend):
 class OpenAICompatibleBackend:
     """同步 OpenAI 兼容后端，供同步 Harness 使用。
 
-    与 harness.py 里的同名后端等价，统一收敛到 backends 模块，
-    便于一处维护。异步评测请优先用 OpenAIAsyncBackend。
+    唯一维护入口，异步评测请优先用 OpenAIAsyncBackend。
     """
 
     def __init__(
