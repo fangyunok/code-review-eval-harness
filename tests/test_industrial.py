@@ -1,7 +1,6 @@
 """工业级能力单元测试：异步并发、重试、门禁、run store 趋势。"""
 
 import asyncio
-import json
 import sys
 import tempfile
 from pathlib import Path
@@ -9,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from code_review_eval.async_eval import AsyncEvaluator, FakeAsyncBackend
-from code_review_eval.evaluate import evaluate_async, load_samples
+from code_review_eval.evaluate import evaluate_async
 from code_review_eval.gate import QualityGate, detect_regression
 from code_review_eval.harness import Harness
 from code_review_eval.runstore import RunStore

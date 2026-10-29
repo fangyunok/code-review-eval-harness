@@ -69,6 +69,37 @@ def extract_from_report(report: Report) -> Dict[str, Any]:
         "metrics": metrics,
         "attribution_rows": attribution_rows,
         "missed_critical": missed_critical,
+        "summary": _build_summary(metrics, attribution),
+    }
+
+
+def _build_summary(metrics: List[Dict[str, Any]], attribution: Dict[str, Dict[str, int]]) -> Dict[str, Any]:
+    """构建「结论先行」摘要：谁最优、F1 差距、最薄弱缺陷类型。"""
+    if not metrics:
+        return {"best": None, "best_f1": 0, "runner_up_f1": 0, "gap": 0,
+                "weakest_type": None, "weakest_count": 0, "total_missed_critical": 0}
+
+    best = max(metrics, key=lambda m: m["f1"])
+    best_f1 = best["f1"]
+    runner_up = max((m["f1"] for m in metrics if m["name"] != best["name"]), default=0.0)
+    gap = best_f1 - runner_up
+
+    # 最薄弱缺陷类型：跨模型漏报总数最多的类型
+    weakest_type, weakest_count = None, 0
+    for dtype, by_model in attribution.items():
+        total = sum(by_model.values())
+        if total > weakest_count:
+            weakest_type, weakest_count = dtype, total
+
+    total_missed_critical = sum(m["missed_critical"] for m in metrics)
+    return {
+        "best": best["name"],
+        "best_f1": round(best_f1, 4),
+        "runner_up_f1": round(runner_up, 4),
+        "gap": round(gap, 4),
+        "weakest_type": weakest_type,
+        "weakest_count": weakest_count,
+        "total_missed_critical": total_missed_critical,
     }
 
 
@@ -139,11 +170,19 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .badge.performance { background: #faeeda; color: #854f0b; }
   .badge.style { background: #e1f5ee; color: #0f6e56; }
   .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+  .summary .item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .summary .label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .summary .value { font-size: 22px; font-weight: 600; }
+  .summary .value.best { color: var(--teal); }
+  .summary .value.worst { color: var(--red); }
 </style>
 </head>
 <body>
 <h1>代码评审 Agent 归因看板</h1>
 <div class="sub">跨模型对比 · 缺陷类型归因 · critical 漏报 · 历史趋势</div>
+
+<div class="summary" id="summary"></div>
 
 <div class="grid">
   <div class="card">
@@ -168,6 +207,18 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 const DATA = __DATA__;
 
 const METRIC_COLORS = { precision: "#378add", recall: "#1d9e75", f1: "#d85a30" };
+
+function renderSummary() {
+  const s = DATA.summary;
+  const el = document.getElementById("summary");
+  if (!s || !s.best) { el.style.display = "none"; return; }
+  el.innerHTML = `
+    <div class="item"><div class="label">最优模型</div><div class="value best">${s.best}</div></div>
+    <div class="item"><div class="label">F1 领先幅度</div><div class="value">+${s.gap}</div></div>
+    <div class="item"><div class="label">最薄弱缺陷类型</div><div class="value worst">${s.weakest_type || "—"}<span style="font-size:13px;color:var(--muted)">（漏 ${s.weakest_count}）</span></div></div>
+    <div class="item"><div class="label">critical 漏报</div><div class="value ${s.total_missed_critical ? 'worst' : ''}">${s.total_missed_critical}</div></div>
+  `;
+}
 
 function renderMetrics() {
   const models = DATA.metrics.map(m => m.name);
@@ -253,6 +304,7 @@ function renderTrend() {
   });
 }
 
+renderSummary();
 renderMetrics();
 renderAttribution();
 renderCritical();

@@ -82,11 +82,19 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
   .badge.performance { background: #faeeda; color: #854f0b; }
   .badge.style { background: #e1f5ee; color: #0f6e56; }
   .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+  .summary .item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .summary .label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .summary .value { font-size: 22px; font-weight: 600; }
+  .summary .value.best { color: var(--teal); }
+  .summary .value.worst { color: var(--red); }
 </style>
 </head>
 <body>
 <h1>代码评审 Agent 归因看板</h1>
 <div class="sub">跨模型对比 · 缺陷类型归因 · critical 漏报 · 历史趋势</div>
+
+<div class="summary" id="summary"></div>
 
 <div class="grid">
   <div class="card">
@@ -108,9 +116,21 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
 </div>
 
 <script>
-const DATA = {"models": ["model-a", "model-b"], "metrics": [{"name": "model-a", "precision": 1.0, "recall": 0.5, "f1": 0.6667, "missed_critical": 0, "false_positive": 0}, {"name": "model-b", "precision": 0.8571, "recall": 1.0, "f1": 0.9231, "missed_critical": 0, "false_positive": 1}], "attribution_rows": [{"type": "logic", "model": "model-a", "count": 1}, {"type": "logic", "model": "model-b", "count": 0}, {"type": "performance", "model": "model-a", "count": 1}, {"type": "performance", "model": "model-b", "count": 0}, {"type": "style", "model": "model-a", "count": 1}, {"type": "style", "model": "model-b", "count": 0}], "missed_critical": [], "trend": []};
+const DATA = {"models": ["model-a", "model-b"], "metrics": [{"name": "model-a", "precision": 1.0, "recall": 0.5, "f1": 0.6667, "missed_critical": 0, "false_positive": 0}, {"name": "model-b", "precision": 0.8571, "recall": 1.0, "f1": 0.9231, "missed_critical": 0, "false_positive": 1}], "attribution_rows": [{"type": "logic", "model": "model-a", "count": 1}, {"type": "logic", "model": "model-b", "count": 0}, {"type": "performance", "model": "model-a", "count": 1}, {"type": "performance", "model": "model-b", "count": 0}, {"type": "style", "model": "model-a", "count": 1}, {"type": "style", "model": "model-b", "count": 0}], "missed_critical": [], "summary": {"best": "model-b", "best_f1": 0.9231, "runner_up_f1": 0.6667, "gap": 0.2564, "weakest_type": "performance", "weakest_count": 1, "total_missed_critical": 0}, "trend": []};
 
 const METRIC_COLORS = { precision: "#378add", recall: "#1d9e75", f1: "#d85a30" };
+
+function renderSummary() {
+  const s = DATA.summary;
+  const el = document.getElementById("summary");
+  if (!s || !s.best) { el.style.display = "none"; return; }
+  el.innerHTML = `
+    <div class="item"><div class="label">最优模型</div><div class="value best">${s.best}</div></div>
+    <div class="item"><div class="label">F1 领先幅度</div><div class="value">+${s.gap}</div></div>
+    <div class="item"><div class="label">最薄弱缺陷类型</div><div class="value worst">${s.weakest_type || "—"}<span style="font-size:13px;color:var(--muted)">（漏 ${s.weakest_count}）</span></div></div>
+    <div class="item"><div class="label">critical 漏报</div><div class="value ${s.total_missed_critical ? 'worst' : ''}">${s.total_missed_critical}</div></div>
+  `;
+}
 
 function renderMetrics() {
   const models = DATA.metrics.map(m => m.name);
@@ -196,6 +216,7 @@ function renderTrend() {
   });
 }
 
+renderSummary();
 renderMetrics();
 renderAttribution();
 renderCritical();

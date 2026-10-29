@@ -16,7 +16,7 @@ import asyncio
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .harness import Harness
 from .schema import ReviewIssue, Sample

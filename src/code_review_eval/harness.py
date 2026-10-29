@@ -16,7 +16,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
-from .schema import DEFECT_TYPES, SEVERITIES, Defect, ReviewIssue, Sample
+from .schema import DEFECT_TYPES, SEVERITIES, ReviewIssue, Sample
 
 # 结构化评审 prompt：要求模型按固定 JSON 输出，便于解析和对齐
 SYSTEM_PROMPT = (

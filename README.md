@@ -9,10 +9,12 @@
 | 评测集管线 | 真实 PR 抽取 + 合成生成 + 去重/完整性/一致性校验 | 从真实研发链路整理评测用例，规模化可扩展 |
 | 工程脚手架稳定性 | 解析成功率 / 格式合规率 | Harness 层，隔离工程噪声 |
 | 模型评审能力 | Precision / Recall / F1 | Model 层，字段级缺陷对齐打分 |
+| 对齐算法 | 位置区间重叠 + 类型强约束 + 可选语义嵌入 | 容忍行号偏移、区分语义、可插拔 embedding |
 | 失败归因 | 按缺陷类型 / 严重度 / 产品线聚合漏报 | 定位「哪类缺陷漏得最多」 |
 | 异步并发 | 并发度 / 重试 / 超时 / 失败隔离 | 吞吐从串行到批量 |
 | 可复现 | run_id + 配置快照 + 结构化产物 | 每次评测可追溯、可重现 |
 | 质量门禁 | 阈值否决 + 语义化退出码 | 评测结果作为质量否决项接入 CI |
+| 工程规范 | ruff / mypy / pre-commit / Makefile / CI 矩阵 | 代码质量有门禁，多版本 Python 验证 |
 
 ## 为什么是「双层」评测
 
@@ -23,11 +25,22 @@
 
 先保证 Harness 稳定，Model 层的分数才可信。
 
+## 对齐算法（Model 层的核心）
+
+模型输出的措辞和位置几乎不可能与标注逐字相同，对齐用三层信号取加权最高分：
+
+1. **位置区间重叠**：location 解析成「文件 + 行号区间」，用行号距离衰减打分，容忍 ±几行的偏移（比字符串相等鲁棒得多）；
+2. **类型强约束**：缺陷类型不同直接判定不匹配，避免位置巧合导致的乱配；
+3. **语义相似**（可选）：用 embedding 算「意见文本」与「缺陷描述」的语义距离，措辞完全不同也能识别同一件事。默认零依赖词法兜底，接 `[embeddings]` 可插拔 embedding 模型。
+
 ## 快速开始
 
 ```bash
 # 依赖仅需 Python 3.10+，核心评测零第三方依赖
-pip install -e ".[dev]"   # 跑测试；可选 openai 后端用 ".[openai]"
+pip install -e ".[dev]"   # 跑测试；可选 openai 后端 ".[openai]"、语义对齐 ".[embeddings]"
+
+# 一键质量门禁（测试 + lint + 类型检查）
+make check
 
 # 跑单元测试
 pytest -q
@@ -37,6 +50,9 @@ python -m code_review_eval.datasets.pipeline --output data/benchmark.jsonl --syn
 
 # 工业级评测：构建 + 异步评测 + 质量门禁（退出码 0=通过 1=不通过）
 creh eval --benchmark data/benchmark.jsonl --synthetic 50 --thresholds '{"f1": 0.5}'
+
+# 真实数据验证（需 GitHub token，网络正常时运行）
+python scripts/verify_real_data.py --repo psf/requests --token-file .gh-token
 
 # 离线演示：模拟两个模型跑完整链路
 python demo.py
@@ -190,25 +206,30 @@ src/code_review_eval/
   schema.py        数据模型（Sample / Defect / ReviewIssue）
   harness.py       Harness 层（统一调用 + 解析校验）
   aligner.py       Model 层（缺陷对齐 + 打分 + 归因）
+  location.py      位置区间解析（LocationSpan / 行号距离衰减）
+  semantic.py      语义匹配（cosine / embedding / 零依赖兜底）
   report.py        归因分析 + 报告输出
   evaluate.py      同步 + 异步评测入口
   async_eval.py    异步并发执行器（并发/重试/超时/隔离）
   runstore.py      可复现 run 管理（run_id/配置快照/趋势）
   gate.py          质量门禁 + 退出码 + 防退化
-  dashboard.py     归因可视化看板（数据提取 + 交互式 HTML）
+  dashboard.py     归因可视化看板（结论先行 + 交互式 HTML）
   cli.py           工业级评测 CLI
   datasets/
     synthetic.py   合成数据生成
-    github_source.py  真实 PR 抽取
+    github_source.py  真实 PR 抽取（含非缺陷评论过滤）
     validation.py  数据质量校验
     pipeline.py    数据管线统一入口
 data/samples.jsonl   样例评测集（离线可复现）
-tests/               单元测试（核心 + 数据管线 + 工业级能力）
+scripts/verify_real_data.py   真实数据验证脚本
+tests/               单元测试（核心 + 对齐 + 数据管线 + 工业级 + 看板）
 demo.py              离线演示入口
+Makefile             统一工程入口（test/lint/typecheck/ci）
+.pre-commit-config.yaml   提交前自动检查
 ```
 
 ## Roadmap
 
-- 对齐策略演进：嵌入相似度对齐、位置区间重叠判定
 - 更多后端适配（Anthropic / 本地模型服务）
 - 评测集版本管理（数据集快照与变更追踪）
+- 按产品线聚合的归因看板细化

@@ -15,13 +15,12 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from .async_eval import FakeAsyncBackend
 from .evaluate import evaluate_async, load_samples
 from .gate import QualityGate
 from .runstore import RunStore
-from .schema import Sample
 
 
 def _build_backends_from_responses(responses: Dict[str, List[str]]):

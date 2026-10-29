@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import itertools
 import random
 from typing import Dict, List
 

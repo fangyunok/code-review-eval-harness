@@ -11,6 +11,8 @@
 from .schema import Defect, Sample, ReviewIssue
 from .harness import Harness
 from .aligner import ModelEvaluator
+from .location import LocationSpan, parse_location
+from .semantic import EmbeddingSemanticMatcher, NoopSemanticMatcher, cosine_similarity
 from .report import Report
 from .gate import QualityGate, GateResult
 from .runstore import RunStore, RunArtifact, RunConfig

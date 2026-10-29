@@ -15,9 +15,9 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import re
+import time
 from typing import Any, Dict, List, Optional
 from urllib.request import Request, urlopen
 
@@ -53,6 +53,26 @@ def _classify_severity(text: str) -> str:
     return "minor"
 
 
+# 非缺陷评论特征：纯赞同/感谢/表情/打招呼等，不应作为缺陷标注
+_NON_DEFECT_PATTERNS = [
+    r"^\s*[+1👍👎❤️🚀]+",             # 纯 +1 或表情
+    r"^\s*(thanks?|thank you|nice|great|good|lgtm|awesome|perfect|brilliant)",  # 赞同/感谢
+    r"^\s*(sorry|my bad|never ?mind)",  # 道歉/收回
+]
+
+
+def _is_non_defect_comment(body: str) -> bool:
+    """判断一条 review comment 是否是非缺陷评论（应被过滤）。"""
+    stripped = body.strip()
+    if len(stripped) < 20:  # 过短的评论通常是表情/赞同
+        return True
+    low = stripped.lower()
+    for pat in _NON_DEFECT_PATTERNS:
+        if re.match(pat, low):
+            return True
+    return False
+
+
 class GitHubPRSource:
     """从 GitHub API 抽取 PR 评测数据。
 
@@ -61,17 +81,31 @@ class GitHubPRSource:
 
     API = "https://api.github.com"
 
-    def __init__(self, token: Optional[str] = None):
+    def __init__(self, token: Optional[str] = None, timeout: float = 60.0, retries: int = 3):
         self.token = token
+        self.timeout = timeout
+        self.retries = retries
 
     def _request(self, path: str) -> Any:
+        """带重试的 GET 请求，处理瞬时网络抖动与限流。"""
         url = f"{self.API}{path}"
         headers = {"Accept": "application/vnd.github+json", "User-Agent": "code-review-eval-harness"}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         req = Request(url, headers=headers)
-        with urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        return self._request_with_retry(req)
+
+    def _request_with_retry(self, req: Request) -> Any:
+        last_err = None
+        for attempt in range(self.retries):
+            try:
+                with urlopen(req, timeout=self.timeout) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except Exception as e:
+                last_err = e
+                if attempt < self.retries - 1:
+                    time.sleep(2 ** attempt)  # 指数退避
+        raise last_err  # type: ignore[misc]
 
     def fetch_prs(self, repo: str, state: str = "closed", per_page: int = 10) -> List[Dict]:
         """拉取仓库的 PR 列表（含 diff_url 和 review_comments_url）。"""
@@ -85,8 +119,16 @@ class GitHubPRSource:
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         req = Request(diff_url, headers=headers)
-        with urlopen(req, timeout=30) as resp:
-            return resp.read().decode("utf-8", errors="replace")
+        last_err = None
+        for attempt in range(self.retries):
+            try:
+                with urlopen(req, timeout=self.timeout) as resp:
+                    return resp.read().decode("utf-8", errors="replace")
+            except Exception as e:
+                last_err = e
+                if attempt < self.retries - 1:
+                    time.sleep(2 ** attempt)
+        raise last_err  # type: ignore[misc]
 
     def fetch_review_comments(self, comments_url: str) -> List[Dict]:
         return self._request(comments_url.split(self.API)[1])
@@ -120,6 +162,8 @@ class GitHubPRSource:
                 body = c.get("body", "")
                 if not body.strip():
                     continue
+                if _is_non_defect_comment(body):
+                    continue  # 过滤赞同/感谢/纯提问等非缺陷评论
                 path = c.get("path", "")
                 line = c.get("line") or c.get("original_line") or ""
                 location = f"{path}:{line}" if line else path

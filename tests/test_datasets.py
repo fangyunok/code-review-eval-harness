@@ -1,6 +1,5 @@
 """数据管线单元测试：合成生成、质量校验、去重。"""
 
-import json
 import sys
 from pathlib import Path
 

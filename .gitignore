@@ -11,7 +11,7 @@ reports/
 runs/
 *.json
 !data/*.jsonl
-data/benchmark.jsonl
+data/benchmark*.jsonl
 *.html
 !examples/*.html
 .idea/

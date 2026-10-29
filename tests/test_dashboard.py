@@ -1,6 +1,5 @@
 """看板模块单元测试：数据提取 + HTML 渲染。"""
 
-import json
 import sys
 from pathlib import Path
 
@@ -46,6 +45,17 @@ def test_extract_metrics_and_attribution():
     # 归因行：model-a 漏报 performance=1, style=1
     perf_rows = [r for r in data["attribution_rows"] if r["type"] == "performance"]
     assert perf_rows[0]["model"] == "model-a" and perf_rows[0]["count"] == 1
+
+
+def test_extract_summary():
+    data = extract_from_report(_make_report())
+    s = data["summary"]
+    # model-b 的 F1 0.9231 高于 model-a 的 0.6667
+    assert s["best"] == "model-b"
+    assert s["best_f1"] == 0.9231
+    assert abs(s["gap"] - (0.9231 - 0.6667)) < 1e-4
+    # 最薄弱类型：performance 和 style 各漏 1，performance 按字典序排前
+    assert s["weakest_type"] in ("performance", "style")
 
 
 def test_render_dashboard_contains_charts():
